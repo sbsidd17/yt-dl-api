@@ -3,6 +3,9 @@ from pydantic import BaseModel
 import yt_dlp
 import re
 from typing import Optional
+import os
+import tempfile
+import requests  # Added for fetching GitHub raw link
 
 app = FastAPI(
     title="YouTube Downloader API",
@@ -19,6 +22,9 @@ class VideoResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     error: str
+
+# GitHub raw link for cookies.txt
+COOKIES_URL = "https://raw.githubusercontent.com/sbsidd17/yt-dl-api/refs/heads/main/api/cookies.txt"
 
 @app.get("/", summary="API Welcome Message")
 async def home():
@@ -42,6 +48,21 @@ async def download_video(url: str = Query(..., title="YouTube Video URL", descri
             raise HTTPException(status_code=400, detail="Invalid YouTube URL")
         url = f"https://www.youtube.com/watch?v={video_id_match.group(1)}"
 
+        # Fetch cookies from GitHub raw link
+        cookie_file = None
+        try:
+            response = requests.get(COOKIES_URL, timeout=5)
+            response.raise_for_status()  # Raise exception for bad status codes
+            cookies_content = response.text
+            if cookies_content:
+                # Write cookies to a temporary file
+                with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as temp_cookie_file:
+                    temp_cookie_file.write(cookies_content)
+                    cookie_file = temp_cookie_file.name
+        except requests.RequestException as e:
+            # Log error but proceed without cookies
+            print(f"Failed to fetch cookies: {str(e)}")
+
         ydl_opts = {
             "format": "best[ext=mp4]/best",  # Prioritize MP4, fallback to best available
             "quiet": True,
@@ -51,7 +72,7 @@ async def download_video(url: str = Query(..., title="YouTube Video URL", descri
             "noprogress": True,
             "sleep_interval": 1,
             "youtube_include_dash_manifest": False,
-            "cookiefile": "api/cookies.txt",  # Optional: for age-restricted or geo-blocked videos
+            "cookiefile": cookie_file if cookie_file else None,  # Use temp file if cookies fetched
             "headers": {
                 "User-Agent": "Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Mobile Safari/537.36",
                 "Accept-Language": "en-US,en;q=0.5",
@@ -60,6 +81,10 @@ async def download_video(url: str = Query(..., title="YouTube Video URL", descri
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(url, download=False)
+
+        # Clean up temporary cookie file if it was created
+        if cookie_file and os.path.exists(cookie_file):
+            os.remove(cookie_file)
 
         if not info_dict or "url" not in info_dict:
             raise HTTPException(status_code=400, detail="Failed to retrieve video info or video unavailable")
