@@ -5,7 +5,6 @@ import re
 from typing import Optional
 import os
 import tempfile
-import requests  # Added for fetching GitHub raw link
 
 app = FastAPI(
     title="YouTube Downloader API",
@@ -23,8 +22,29 @@ class VideoResponse(BaseModel):
 class ErrorResponse(BaseModel):
     error: str
 
-# GitHub raw link for cookies.txt
-COOKIES_URL = "https://raw.githubusercontent.com/sbsidd17/yt-dl-api/refs/heads/main/api/cookies.txt"
+# Embedded Netscape cookies
+NETSCAPE_COOKIES = """# Netscape HTTP Cookie File
+# http://curl.haxx.se/rfc/cookie_spec.html
+# This is a generated file!  Do not edit.
+
+.youtube.com	TRUE	/	FALSE	1791783098	HSID	AFbXNnuoQ38m_Isbf
+.youtube.com	TRUE	/	TRUE	1791783098	SSID	AFL2ZkJmyWfDHkaOZ
+.youtube.com	TRUE	/	FALSE	1791783098	APISID	nCO_x36hbH_spNK-/A3b9x-CuwQ3QTOlve
+.youtube.com	TRUE	/	TRUE	1791783098	SAPISID	zCtKazkWDBFVUx4C/A5msKbJka5fNRD3r0
+.youtube.com	TRUE	/	TRUE	1791783098	__Secure-1PAPISID	zCtKazkWDBFVUx4C/A5msKbJka5fNRD3r0
+.youtube.com	TRUE	/	TRUE	1791783098	__Secure-3PAPISID	zCtKazkWDBFVUx4C/A5msKbJka5fNRD3r0
+.youtube.com	TRUE	/	TRUE	1779869218	LOGIN_INFO	AFmmF2swRQIhAKL2Z2ZAax5R3zDe9Lk_CqWggt8BHqllF1U4JV6xUx_FAiAFgtC0x7g9I6FabrjcI6OCoxE79H0WLtY8-INoS1luvg:QUQ3MjNmeEpHNmNXNmpUSzc5OTYxblVBQmt4ZGlpSzhSdzBKSXRXYjZWZm93MDd4d1hLYUhjQ25lWWNqVEhnVjNpSFJtWlplMWtuejFtNl9md0IxOGlxSU1weGhxLVBYMXIwMGFVSmZOSEx2eGdKQkNJSF9MWV81QmZHMXFvRE01REtRZFNrUkRtX05HY2RTQ1E4ckZ3NGxubjlkZEtPMnFB
+.youtube.com	TRUE	/	TRUE	1792528180	PREF	f6=40000000&tz=Asia.Calcutta&f7=100&f4=4000000
+.youtube.com	TRUE	/	FALSE	1791783098	SID	g.a0001Ajf9_sjTGl9s20zBSYrLp1NCEuoMyKesfzXCrzC6S3ldwBP5D_IRS3Ch3Lna9dX8YrMBAACgYKAccSARISFQHGX2Mil0mncc1gs6VWFsm1OiB-nhoVAUF8yKqApfPdXRnWUYUoHD9YRvtw0076
+.youtube.com	TRUE	/	TRUE	1791783098	__Secure-1PSID	g.a0001Ajf9_sjTGl9s20zBSYrLp1NCEuoMyKesfzXCrzC6S3ldwBPA5iLiDjXgk_nMW4G9pUYQgACgYKAfsSARISFQHGX2Mi837Vtd11pI6pJk-yJyVFqxoVAUF8yKrU3_7LGxCQSJnQLXeHmN3I0076
+.youtube.com	TRUE	/	TRUE	1791783098	__Secure-3PSID	g.a0001Ajf9_sjTGl9s20zBSYrLp1NCEuoMyKesfzXCrzC6S3ldwBPy21O0PkO_4ynQoX6L25caQACgYKATISARISFQHGX2MizUeedIFHFItzwAYbmHAjdBoVAUF8yKp0-EqNYqGw93ZpPnBzgOSo0076
+.youtube.com	TRUE	/	TRUE	1789503590	__Secure-1PSIDTS	sidts-CjEBmkD5SwleRmts4iuiGj_Jf4GzzZeKXE9WskYk9h6iMOjST5srqUjInbA-44w6Eh5NEAA
+.youtube.com	TRUE	/	TRUE	1789503590	__Secure-3PSIDTS	sidts-CjEBmkD5SwleRmts4iuiGj_Jf4GzzZeKXE9WskYk9h6iMOjST5srqUjInbA-44w6Eh5NEAA
+.youtube.com	TRUE	/	FALSE	1757968186	ST-xuwub9	session_logininfo=AFmmF2swRQIhAKL2Z2ZAax5R3zDe9Lk_CqWggt8BHqllF1U4JV6xUx_FAiAFgtC0x7g9I6FabrjcI6OCoxE79H0WLtY8-INoS1luvg%3AQUQ3MjNmeEpHNmNXNmpUSzc5OTYxblVBQmt4ZGlpSzhSdzBKSXRXYjZWZm93MDd4d1hLYUhjQ25lWWNqVEhnVjNpSFJtWlplMWtuejFtNl9md0IxOGlxSU1weGhxLVBYMXIwMGFVSmZOSEx2eGdKQkNJSF9MWV81QmZHMXFvRE01REtRZFNrUkRtX05HY2RTQ1E4ckZ3NGxubjlkZEtPMnFB
+.youtube.com	TRUE	/	FALSE	1789504183	SIDCC	AKEyXzXrH1cg1bIY0QUjtceOmSetHU4h0BjESHoeSFRVSF6Ok_7mujfcTp0z6IJ83IoU6QVu
+.youtube.com	TRUE	/	TRUE	1789504183	__Secure-1PSIDCC	AKEyXzU7XZfZm4Miidc0tftMmXirK3WhAuZlVuJNqmnXyQp72I7HpNQgeakoy3RQ1jcSU-Wq3A
+.youtube.com	TRUE	/	TRUE	1789504183	__Secure-3PSIDCC	AKEyXzWwqi5jMu96s5XbXZONUAyF2z51yVWTxo2Ksj2ubksXEPWgbEb0kg7_MNSuFkx9uA1X
+"""
 
 @app.get("/", summary="API Welcome Message")
 async def home():
@@ -48,20 +68,12 @@ async def download_video(url: str = Query(..., title="YouTube Video URL", descri
             raise HTTPException(status_code=400, detail="Invalid YouTube URL")
         url = f"https://www.youtube.com/watch?v={video_id_match.group(1)}"
 
-        # Fetch cookies from GitHub raw link
+        # Write cookies to a temporary file
         cookie_file = None
-        try:
-            response = requests.get(COOKIES_URL, timeout=5)
-            response.raise_for_status()  # Raise exception for bad status codes
-            cookies_content = response.text
-            if cookies_content:
-                # Write cookies to a temporary file
-                with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as temp_cookie_file:
-                    temp_cookie_file.write(cookies_content)
-                    cookie_file = temp_cookie_file.name
-        except requests.RequestException as e:
-            # Log error but proceed without cookies
-            print(f"Failed to fetch cookies: {str(e)}")
+        if NETSCAPE_COOKIES:
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as temp_cookie_file:
+                temp_cookie_file.write(NETSCAPE_COOKIES)
+                cookie_file = temp_cookie_file.name
 
         ydl_opts = {
             "format": "best[ext=mp4]/best",  # Prioritize MP4, fallback to best available
@@ -72,7 +84,7 @@ async def download_video(url: str = Query(..., title="YouTube Video URL", descri
             "noprogress": True,
             "sleep_interval": 1,
             "youtube_include_dash_manifest": False,
-            "cookiefile": cookie_file if cookie_file else None,  # Use temp file if cookies fetched
+            "cookiefile": cookie_file if cookie_file else None,  # Use temp file if cookies exist
             "headers": {
                 "User-Agent": "Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Mobile Safari/537.36",
                 "Accept-Language": "en-US,en;q=0.5",
