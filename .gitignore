@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Vercel
+.vercel/
+.vercel_cache/
+
+# Node (optional, in case you use npm for Vercel CLI)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Cookies file
+api/cookies.txt
+
+# Misc
+*.log
+*.bak
